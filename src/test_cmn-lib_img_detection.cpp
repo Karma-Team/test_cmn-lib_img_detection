@@ -34,11 +34,9 @@ using namespace cv;
 
 
 
-int main()
+int main( int argc, char** argv )
 {
 	VideoCapture cap("/home/ahu/Workspace/py-video-processing-rsc/video_data/finale_match_1.mp4");
-
-	// if not success, exit program
 	if(!cap.isOpened())
 	{
 		cout << "Cannot open the web cam" << endl;
@@ -47,37 +45,46 @@ int main()
 
 	while(true)
 	{
-		Mat frameOriginal;
-		Mat FrameFliped;
-
-		// read a new frame from video
-		bool bSuccess = cap.read(frameOriginal);
-
-		// if not success, break loop
+		// Read a new frame from video
+		Mat imgOriginal;
+		bool bSuccess = cap.read(imgOriginal);
 		if(!bSuccess)
 		{
 			cout << "Cannot read a frame from video stream" << endl;
 			break;
 		}
 
-		// Laterally invert the image / flip the image
-		flip(frameOriginal, FrameFliped, 1);
-		flip(FrameFliped, FrameFliped, 1);
+		// Convert the captured frame from BGR to HSV
+		Mat imgHSV;
+		cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV);
 
-		// Converting image from BGR to HSV color space.
-		Mat frameHsv;
-		cvtColor(FrameFliped, frameHsv, COLOR_BGR2HSV);
+		// Threshold the image
+		Mat imgThresholdedGreen;
+		Mat imgThresholdedRedA;
+		Mat imgThresholdedRedB;
+		//inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded);
+		inRange(imgHSV, Scalar(30, 75, 0),		Scalar(70, 255, 255),	imgThresholdedGreen);
+		inRange(imgHSV, Scalar(0, 100, 100),	Scalar(10, 255, 255),	imgThresholdedRedA);
+		inRange(imgHSV, Scalar(160, 100, 100),	Scalar(180, 255, 255),	imgThresholdedRedB);
 
-		// Creating masks to detect the upper and lower red color.
-		Mat mask, l_lower_hue_range_red, l_upper_hue_range_red;
-		inRange(frameHsv, Scalar(0, 100, 100),		Scalar(10, 255, 255),	l_lower_hue_range_red);
-		inRange(frameHsv, Scalar(160, 100, 100),	Scalar(180, 255, 255),	l_upper_hue_range_red);
+		// Generate the final mask
+		Mat imgMask;
+		Mat imgThresholded;
+		imgMask			= imgThresholdedGreen + imgThresholdedRedA + imgThresholdedRedB;
+		imgThresholded 	= imgThresholdedGreen + imgThresholdedRedA + imgThresholdedRedB;
 
-		// Generating the final mask
-		mask = l_lower_hue_range_red + l_upper_hue_range_red;
+		// Morphological opening (remove small objects from the foreground)
+		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+		dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
 
-		imshow("Thresholded Image", mask);	// Show the thresholded image
-		imshow("Original", FrameFliped);	// Show the original image
+		// Morphological closing (fill small holes in the foreground)
+		dilate( imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+
+		// Show the original and the thresholded image
+		imshow("Mask Image", 		imgMask);
+		imshow("Thresholded Image",	imgThresholded);
+		imshow("Original Image", 	imgOriginal);
 
 		// Wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop
 		if(waitKey(30) == 27)
